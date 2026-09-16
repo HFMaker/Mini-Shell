@@ -6,7 +6,7 @@
 #include <sys/wait.h>
 #include <stdbool.h>
 #include <fcntl.h>
-#define MAX_INPUT 1024
+
 
 
 
@@ -73,9 +73,9 @@ void printPrompt(void){
 }
 
 
-int main(void)
+int main(int argc, char **argv)
 {
-    char input[MAX_INPUT];
+    char input[255];
   
     puts("You are now using \x1B[1;36mhf-shell\x1B[0m made by \x1B[1;36mHFMaker\x1B[0m");
     
@@ -90,7 +90,7 @@ int main(void)
 
     if (strlen(input) == 0) continue;
 
-    char *argv[128]; //El buffer qe guarda el input del usuario
+    char *argv[MAX_INPUT]; //El buffer qe guarda el input del usuario
 
     parser(input, argv); //Aquí se parsea el input del usuario
 
@@ -140,7 +140,7 @@ int main(void)
             exit(1);
         }
     
-        
+
         wait(NULL);
         continue;
         
@@ -261,18 +261,15 @@ int main(void)
     
     pid_t pid = fork();// Si el input del usuario no tiene ninguna pipe o redirección, entonces se ejecuta de manera normal
 
-    if (pid == 0)
-    {
+    if (pid == 0){
         execvp(argv[0], argv);
-        perror("execvp");
+        printf("hf-shell: %s: command not found\n", argv[0]);
         exit(1);
     }
-    else
-    {
-        wait(NULL);
+    else wait(NULL);
+    
     }
-    }
-return 0;// Y luego si quieres terminar de usar la Shell, pues haces "exit" y listo 
+return 0; 
 }
 
 
