@@ -63,12 +63,15 @@ void parser(char *input, char *argv[]){ //Aquí está la función para parsear e
 }
 
 void printPrompt(void){
-
+	
+    char buffer[256];
     char *user = getenv("USER");
+    snprintf(buffer, sizeof(buffer), "/home/%s", user);
     char *cwd = getcwd(NULL, 0);
     char host[HOST_NAME_MAX + 1];
     gethostname(host, sizeof(host));
-    printf("\x1B[1;36m%s@%s\x1B[0m:%s$ ", user, host, cwd);
+    strcmp(cwd, buffer) == 0 ? printf("\x1B[1;36m%s@%s\x1B[0m:~$ ", user, host)
+    : printf("\x1B[1;36m%s@%s\x1B[0m:%s$ ", user, host, cwd);
     free(cwd);
 }
 
