@@ -7,7 +7,10 @@
 #include <stdbool.h>
 #include <fcntl.h>
 
+#define PIPELINE_FLAG (1 << 0) // -> 0001
+#define REDIRECTION_FLAG (1 << 1) // -> 0010
 
+unsigned int flags = PIPELINE_FLAG | REDIRECTION_FLAG; // -> 0011
 
 
 void parser(char *input, char *argv[]){ //Aquí está la función para parsear el input del usuario
@@ -25,6 +28,7 @@ void parser(char *input, char *argv[]){ //Aquí está la función para parsear e
                 argv[j] = "|";
                 j++;
                 word = false;
+		flags |= PIPELINE_FLAG;
                 continue;
 
             }
@@ -81,10 +85,12 @@ int main(int argc, char **argv)
     char input[255];
   
     puts("You are now using \x1B[1;36mhf-shell\x1B[0m made by \x1B[1;36mHFMaker\x1B[0m");
-    
+
+        
 
     while (1) //El bucle principal de la Shell
     {
+	if (flags & PIPELINE_FLAG) puts("Pipeline flag is ON");
         printPrompt();
         fflush(stdout);
         if (!fgets(input, MAX_INPUT, stdin)) break;
