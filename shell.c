@@ -10,10 +10,15 @@
 #define PIPELINE_FLAG (1 << 0) // -> 0001
 #define REDIRECTION_FLAG (1 << 1) // -> 0010
 
-unsigned int flags = PIPELINE_FLAG | REDIRECTION_FLAG; // -> 0011
 
 
-void parser(char *input, char *argv[]){ //Aquí está la función para parsear el input del usuario
+unsigned int flags = ~(PIPELINE_FLAG | REDIRECTION_FLAG);
+// 0000 if all flags are deactivated, 0011 if all flags are activated
+
+int pipeIndex;
+
+
+void parser(char *input, char *argv[]){ //Parse the user's input
         int i;
         int j = 0;
         bool word = false;
@@ -26,9 +31,11 @@ void parser(char *input, char *argv[]){ //Aquí está la función para parsear e
 
             if (input[i] == '|'){
                 argv[j] = "|";
-                j++;
                 word = false;
 		flags |= PIPELINE_FLAG;
+                flags |= PIPELINE_FLAG;
+                pipeIndex = j;
+                j++;
                 continue;
 
             }
@@ -80,8 +87,8 @@ void printPrompt(void){
 }
 
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv){
+
     char input[255];
   
     puts("You are now using \x1B[1;36mhf-shell\x1B[0m made by \x1B[1;36mHFMaker\x1B[0m");
@@ -94,22 +101,27 @@ int main(int argc, char **argv)
         printPrompt();
         fflush(stdout);
         if (!fgets(input, MAX_INPUT, stdin)) break;
+    while (1){ //Main loop of the program
+    
+    printPrompt();
+    fflush(stdout);
+    if (!fgets(input, MAX_INPUT, stdin)) break;
         
     input[strcspn(input, "\n")] = 0;
 
     if (strlen(input) == 0) continue;
 
-    char *argv[MAX_INPUT]; //El buffer qe guarda el input del usuario
+    char *args[MAX_INPUT]; //User's input is stored in this buffer
 
-    parser(input, argv); //Aquí se parsea el input del usuario
+    parser(input, args);
 
-    //Debajo tenemos algunos comandos butilt-in y una función que abre una terminal nueva
+    //We can find some built-in commands and a command that opens a new shell down below
      
-    if (strcmp(argv[0], "cd") == 0){ 
-         if (!argv[1]){
-            chdir(getenv("HOME"));
+    if (strcmp(args[0], "cd") == 0){ 
+         if (!args[1]){
+            chdir(getenv("HOME")); //Get the user's home directory
          } else{
-             if (chdir(argv[1]) != 0){
+             if (chdir(args[1]) != 0){
                 perror("cd");
             }
          }
@@ -118,16 +130,16 @@ int main(int argc, char **argv)
     }
 
     
-    if (strcmp(argv[0], "exit") == 0){
+    if (strcmp(args[0], "exit") == 0){
         exit(0);
     }
 
-    if (strcmp(argv[0], "openshell") == 0){ //el comando que abre la nueva terminal es este (creo que su nombre lo dice todo)
+    if (strcmp(args[0], "openshell") == 0){ 
         pid_t pid = fork();
 
         if (pid == 0)
         {
-            char *term = getenv("TERMINAL");
+            char *term = getenv("TERMINAL"); //Get the user's default terminal
 
             if (term){
                 execlp(term, term, "-e", "./hf-shell", NULL);
@@ -144,7 +156,7 @@ int main(int argc, char **argv)
             execlp("xterm", "xterm", "-e", "./hf-shell", NULL);
             perror("Compatible terminal not found");
             exit(1);
-            execvp(argv[0], argv);
+            execvp(args[0], args);
             perror("execvp");
             exit(1);
         }
@@ -154,27 +166,17 @@ int main(int argc, char **argv)
         continue;
         
     }
-    bool pipe_on_input = false; //Aquí comprobamos si el input del usuario tiene alguna pipe
-    int i;
-    int pipe_index;
-    for (i = 0; argv[i] != NULL; i++){
-        if (strcmp(argv[i], "|") == 0){
-            pipe_on_input = true;
-            pipe_index = i; 
-            argv[i] = NULL;
-        }
-
-    
-
-    }
-
-    if (pipe_on_input == true){ //Y aquí ejecutamos el comando del usuario si este tiene una pipe
+   
+    if (flags & PIPELINE_FLAG){ //Y aquí ejecutamos el comando del usuario si este tiene una pipe
             int fd[2];
             if (pipe(fd) == -1){
                 printf("Error while doing the pipe");
                 return 0;
             }
-            pid_t p1 = fork(); //Primero tenemos el primero proceso (el que se encuentra a la izquierda de la pipe)
+
+            args[pipeIndex] = NULL;
+
+            pid_t p1 = fork(); //first fork for the left child
 
             if (p1 == 0){
 
@@ -182,19 +184,19 @@ int main(int argc, char **argv)
                 close(fd[0]);
                 close(fd[1]);
 
-                execvp(argv[0], argv);
-                perror("execvp left");
+                execvp(args[0], args);
+                perror("execvp");
                 exit(1);
             }
 
-            pid_t p2 = fork(); //Y luego tenemos el segundo proceso, que está al derecha de la pipe
+            pid_t p2 = fork(); //second fork for the right child
 
             if (p2 == 0){
                 dup2(fd[0], STDIN_FILENO);
                 close(fd[0]);
                 close(fd[1]);
-                execvp(argv[pipe_index + 1], argv + pipe_index + 1);
-                perror("execvp right");
+                execvp(args[pipeIndex + 1], args + pipeIndex + 1);
+                perror("execvp");
                 exit(1);
 
             }
@@ -203,46 +205,47 @@ int main(int argc, char **argv)
             close(fd[1]);
             wait(NULL);
             wait(NULL);
+            flags &= ~PIPELINE_FLAG;
             continue;
         }
 
-    int redirection_type = 0; //En esta parte, comprobamos si el input del user tiene alguna redirección
+    int redirection_type = 0; //Check if the user's input has any redirection
     int j;
     int redirection_index;
-    for (j = 0; argv[j] != NULL; j++){
-         if (strcmp(argv[j], ">") == 0){
+    for (j = 0; args[j] != NULL; j++){
+         if (strcmp(args[j], ">") == 0){
             redirection_type = 1;
             redirection_index = j;
-            argv[j] = NULL;
+            args[j] = NULL;
          }
 
-         else if (strcmp(argv[j], ">>") == 0){
+         else if (strcmp(args[j], ">>") == 0){
             redirection_type = 2;
             redirection_index = j;
-            argv[j] = NULL;
+            args[j] = NULL;
          }
 
-         else if (strcmp(argv[j], "<") == 0){
+         else if (strcmp(args[j], "<") == 0){
             redirection_type = 3;
             redirection_index = j;
-            argv[j] = NULL;
+            args[j] = NULL;
          }
     }
 
-    if (redirection_type != 0){// Y aquí ejecutamos el comando del usuario si este tiene alguna redirección
+    if (redirection_type != 0){//Execute the user's input of the code has any redirection
         pid_t pid = fork();
         if (pid == 0){
             int fd_archivo;
             if (redirection_type == 1){
-                fd_archivo = open(argv[redirection_index + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                fd_archivo = open(args[redirection_index + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
             }
 
             else if (redirection_type == 2){
-                fd_archivo = open(argv[redirection_index + 1], O_WRONLY | O_CREAT | O_APPEND, 0644);
+                fd_archivo = open(args[redirection_index + 1], O_WRONLY | O_CREAT | O_APPEND, 0644);
             }
             
             else if (redirection_type == 3){
-                fd_archivo = open(argv[redirection_index + 1], O_RDONLY, 0644);
+                fd_archivo = open(args[redirection_index + 1], O_RDONLY, 0644);
             }
             
             
@@ -260,7 +263,7 @@ int main(int argc, char **argv)
                 perror("close");
                 exit(1);
             }
-            execvp(argv[0], argv);
+            execvp(args[0], args);
         }
         
         wait(NULL);
@@ -268,11 +271,11 @@ int main(int argc, char **argv)
     }
 
     
-    pid_t pid = fork();// Si el input del usuario no tiene ninguna pipe o redirección, entonces se ejecuta de manera normal
+    pid_t pid = fork();//Execute the user's input if there's no pipeline or redirection
 
     if (pid == 0){
-        execvp(argv[0], argv);
-        printf("hf-shell: %s: command not found\n", argv[0]);
+        execvp(args[0], args);
+        printf("hf-shell: %s: command not found\n", args[0]);
         exit(1);
     }
     else wait(NULL);
@@ -280,6 +283,6 @@ int main(int argc, char **argv)
     }
 return 0; 
 }
-
+}
 
 
